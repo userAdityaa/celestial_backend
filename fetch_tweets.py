@@ -1,13 +1,24 @@
-from random import choice
-import requests
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from collections import defaultdict
-import numpy as np
+from flask import Flask, request, jsonify
+from flask_cors import CORS 
 from dotenv import load_dotenv
 import os
+import requests
+from random import choice
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from collections import Counter
+import re
+from collections import defaultdict
+import numpy as np
 import math
 
 load_dotenv()
+
+app = Flask(__name__)
+
+CORS(app)
+
+RAPIDAPI_HOST = os.environ.get("RAPIDAPI_HOST")
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
 class TwitterTarotReader:
     CARD_GROUPS = {
@@ -166,7 +177,7 @@ class TwitterTarotReader:
         for group, cards in self.CARD_GROUPS.items():
             if card_name in cards:
                 similar_cards.extend(cards)
-        return list(set(similar_cards))  # Remove duplicates
+        return list(set(similar_cards)) 
 
     def select_card_from_group(self, primary_card):
         """Select either the primary card or a similar one randomly"""
@@ -216,6 +227,17 @@ class TwitterTarotReader:
     def analyze_personality(self, tweets):
         themes = defaultdict(int)
         sentiments = []
+        combined_text = ' '.join(tweet['text'].lower() for tweet in tweets)
+
+        words = re.findall(r'\b\w+\b', combined_text)
+        word_freq = Counter(words)
+        total_words = len(words)
+    
+
+        for tweet in tweets:
+            text = tweet['text'].lower()
+            sentiment_scores = self.sentiment_analyzer.polarity_scores(text)
+            sentiments.append(sentiment_scores['compound'])
         
         theme_keywords = {
             # Professional Growth
@@ -243,14 +265,38 @@ class TwitterTarotReader:
             },
             # Personal Growth
             'education': {
-                # Traditional
                 'learning', 'study', 'education', 'course', 'degree', 'university', 'college',
-                'school', 'knowledge', 'skills', 'training', 'workshop',
-                # Modern Learning
+                'school', 'knowledge', 'skills', 'training', 'workshop', 'lecture', 'seminar',
+                'academia', 'scholarship', 'research', 'thesis', 'dissertation', 'homework',
+                'assignment', 'exam', 'test', 'quiz', 'grading', 'professor', 'teacher', 'instructor',
+                'student', 'classroom', 'textbook', 'library', 'lab', 'experiment', 'fieldwork',
+                'internship', 'apprenticeship', 'diploma', 'certificate', 'graduation', 'alumni',
+
                 'mooc', 'online course', 'bootcamp', 'certification', 'self-taught', 'tutorial',
-                'documentation', 'learning path', 'roadmap', 'curriculum', 'mentoring',
-                # Learning Platforms
-                'udemy', 'coursera', 'edx', 'linkedin learning', 'pluralsight', 'codecademy'
+                'documentation', 'learning path', 'roadmap', 'curriculum', 'mentoring', 'coaching',
+                'e-learning', 'virtual classroom', 'webinar', 'online degree', 'distance learning',
+                'self-paced learning', 'microlearning', 'gamification', 'interactive learning',
+                'peer learning', 'collaborative learning', 'project-based learning', 'flipped classroom',
+                'blended learning', 'adaptive learning', 'lifelong learning', 'skill development',
+                'critical thinking', 'problem solving', 'creativity', 'innovation', 'soft skills',
+                'technical skills', 'coding', 'programming', 'data science', 'machine learning',
+                'artificial intelligence', 'cybersecurity', 'cloud computing', 'devops', 'ui/ux design',
+
+                'udemy', 'coursera', 'edx', 'linkedin learning', 'pluralsight', 'codecademy',
+                'khan academy', 'skillshare', 'udacity', 'futurelearn', 'alison', 'duolingo',
+                'memrise', 'brilliant', 'datacamp', 'treehouse', 'freecodecamp', 'kaggle',
+                'leetcode', 'hackerrank', 'codewars', 'edmodo', 'google classroom', 'moodle',
+                'canvas', 'blackboard', 'zoom', 'teams', 'slack', 'notion', 'evernote', 'anki',
+                'quizlet', 'rosetta stone', 'babbel', 'busuu', 'lingoda', 'sololearn', 'grasshopper',
+                'scratch', 'code.org', 'w3schools', 'mdn web docs', 'stack overflow', 'github',
+                'gitlab', 'bitbucket', 'docker', 'kubernetes', 'aws', 'azure', 'google cloud',
+                'visual studio code', 'pycharm', 'intellij', 'jupyter notebook', 'rstudio',
+                'tableau', 'power bi', 'figma', 'adobe xd', 'sketch', 'invision', 'miro', 'trello',
+                'asana', 'clickup', 'notion', 'obsidian', 'roam research', 'logseq', 'remnote',
+                'zotero', 'mendeley', 'endnote', 'grammarly', 'hemingway', 'prowritingaid',
+                'google scholar', 'researchgate', 'academia.edu', 'arxiv', 'ieee xplore', 'jstor',
+                'pubmed', 'springer', 'elsevier', 'wiley', 'sage', 'taylor & francis', 'oxford academic',
+                'cambridge core', 'nature', 'science', 'cell', 'plos one', 'frontiers', 'bmc'
             },
             'self_improvement': {
                 # Growth
@@ -262,6 +308,19 @@ class TwitterTarotReader:
                 # Mental Models
                 'decision making', 'critical thinking', 'problem solving', 'cognitive bias',
                 'systems thinking', 'first principles', 'mental models'
+                # Modern Self-Help
+                'productivity', 'time management', 'habit building', 'morning routine',
+                'journaling', 'goal setting', 'accountability', 'personal development',
+                'life design', 'habit stacking', 'deep work', 'flow state', 'focus',
+                'minimalism', 'digital declutter', 'time blocking', 'batching',
+                'intentional living', 'lifestyle design', 'self-optimization',
+
+                # Mental Models
+                'decision making', 'critical thinking', 'problem solving', 'cognitive bias',
+                'systems thinking', 'first principles', 'mental models', 'lateral thinking',
+                'strategic planning', 'root cause analysis', 'framework thinking',
+                'probabilistic thinking', 'inversion', 'second-order thinking',
+                'thought experiments', 'rationality', 'metacognition'
             },
             # Lifestyle & Interests
             'health_wellness': {
@@ -274,6 +333,19 @@ class TwitterTarotReader:
                 # Mental Wellness
                 'therapy', 'counseling', 'anxiety', 'depression', 'burnout', 'work-life balance',
                 'digital wellbeing', 'mental fitness', 'emotional intelligence'
+                # Modern Wellness
+                'biohacking', 'intermittent fasting', 'keto', 'plant-based', 'supplements',
+                'sleep optimization', 'recovery', 'stress management', 'immune system',
+                'cold therapy', 'heat therapy', 'breathwork', 'circadian rhythm',
+                'hormesis', 'microbiome', 'nootropics', 'peptides', 'longevity',
+                'blood testing', 'wearable technology',
+
+                # Mental Wellness
+                'therapy', 'counseling', 'anxiety', 'depression', 'burnout', 'work-life balance',
+                'digital wellbeing', 'mental fitness', 'emotional intelligence',
+                'mindset coaching', 'positive psychology', 'cognitive behavioral therapy',
+                'trauma-informed care', 'stress resilience', 'boundary setting',
+                'self-compassion', 'emotional regulation', 'psychological safety'
             },
             'creativity_arts': {
                 # Traditional Arts
@@ -285,6 +357,19 @@ class TwitterTarotReader:
                 # Creative Tech
                 'generative art', 'creative coding', 'procedural generation', 'digital sculpture',
                 'virtual production', 'creative ai', 'nft art'
+                # Digital Arts
+                'digital art', 'graphic design', '3d modeling', 'animation', 'motion graphics',
+                'ui design', 'ux design', 'web design', 'illustration', 'video editing',
+                'digital painting', 'character design', 'concept art', 'typography',
+                'visual effects', 'compositing', 'color grading', 'digital composition',
+                'parametric design', 'interactive design',
+
+                # Creative Tech
+                'generative art', 'creative coding', 'procedural generation', 'digital sculpture',
+                'virtual production', 'creative ai', 'nft art', 'augmented reality',
+                'virtual reality', 'mixed reality', 'algorithmic art', 'shader art',
+                'real-time graphics', 'projection mapping', 'interactive installations',
+                'data visualization', 'sound design', 'experimental media'
             },
             'travel_adventure': {
                 # Travel
@@ -296,6 +381,18 @@ class TwitterTarotReader:
                 # Adventure Sports
                 'hiking', 'camping', 'climbing', 'surfing', 'skydiving', 'scuba diving',
                 'mountaineering', 'skiing', 'snowboarding'
+                # Modern Travel
+                'digital nomad', 'workation', 'slow travel', 'sustainable travel', 'local experience',
+                'travel hacking', 'remote work travel', 'vanlife', 'backpacking',
+                'house sitting', 'coworking abroad', 'travel blogging', 'minimalist travel',
+                'destination coworking', 'travel photography', 'travel vlogging',
+                'location independence', 'geo arbitrage', 'travel rewards',
+
+                # Adventure Sports
+                'hiking', 'camping', 'climbing', 'surfing', 'skydiving', 'scuba diving',
+                'mountaineering', 'skiing', 'snowboarding', 'paragliding', 'white water rafting',
+                'kayaking', 'canyoneering', 'bouldering', 'ice climbing', 'wingsuit flying',
+                'kiteboarding', 'mountain biking', 'trail running', 'free diving'
             },
             # Social & Community
             'relationships': {
@@ -387,51 +484,72 @@ class TwitterTarotReader:
             }
         }
 
-        for tweet in tweets:
-            text = tweet['text'].lower()
-            # Sentiment analysis
-            sentiment_scores = self.sentiment_analyzer.polarity_scores(text)
-            sentiments.append(sentiment_scores['compound'])
-            
-            # Theme detection
-            for theme, keywords in theme_keywords.items():
-                if any(keyword in text for keyword in keywords):
-                    themes[theme] += 1
+        for theme, keywords in theme_keywords.items():
+            theme_score = 0
+            matched_keywords = set()
 
+            for keyword in keywords:
+                # Handle multi-word keywords
+                if ' ' in keyword:
+                    count = combined_text.count(keyword)
+                    if count > 0:
+                        theme_score += count * 2  # More weight for multi-word matches
+                        matched_keywords.add(keyword)
+                else:
+                    count = word_freq.get(keyword, 0)
+                    if count > 0:
+                        theme_score += count
+                        matched_keywords.add(keyword)
+
+            if theme_score > 0:
+                # Normalize by total words and keyword diversity
+                themes[theme] = (theme_score / total_words) * (len(matched_keywords) / len(keywords))
+
+        # Sentiment Metrics
         tweet_count = len(tweets)
-        avg_sentiment = sum(sentiments)
-        
-        theme_distribution = {theme: count/tweet_count for theme, count in themes.items()}
-        
-        # Find dominant themes (top 3)
+        avg_sentiment = sum(sentiments) / tweet_count if tweet_count > 0 else 0
+
+        # Theme Distribution
+        total_theme_score = sum(themes.values())
+        theme_distribution = {
+            theme: (score / total_theme_score if total_theme_score > 0 else 0)
+            for theme, score in themes.items()
+        }
+
+        print(theme_distribution)
+
+        # Dominant Themes
         sorted_themes = sorted(themes.items(), key=lambda x: x[1], reverse=True)
         dominant_themes = sorted_themes[:3] if sorted_themes else [('neutral', 0)]
 
-        # Calculate personality indicators
+        print(dominant_themes)
+
+        # Personality Indicators
         personality_indicators = {
-            'growth_orientation': (themes['self_improvement'] + themes['education']),
-            'social_engagement': (themes['relationships'] + themes['social_causes']),
-            'emotional_expression': themes['emotional_depth'],
-            'creativity_level': (themes['creativity_arts'] + themes['reflection']),
-            'professional_focus': (themes['professional_development'] + themes['technical_growth']),
-            'lifestyle_balance': (themes['health_wellness'] + themes['entertainment'] + themes['sports'])
-        }
-        
-        # Enhanced emotional analysis
-        emotional_analysis = {
-            'positivity_ratio': len([s for s in sentiments if s > 0]),
-            'emotional_volatility': np.std(sentiments),
-            'emotional_depth': themes['emotional_depth']
+            'growth_orientation': (themes.get('self_improvement', 0) + themes.get('education', 0)),
+            'social_engagement': (themes.get('relationships', 0) + themes.get('social_causes', 0)),
+            'emotional_expression': themes.get('emotional_depth', 0),
+            'creativity_level': (themes.get('creativity_arts', 0) + themes.get('reflection', 0)),
+            'professional_focus': (themes.get('professional_development', 0) + themes.get('technical_growth', 0)),
+            'lifestyle_balance': (themes.get('health_wellness', 0) + themes.get('entertainment', 0) + themes.get('sports', 0))
         }
 
+        # Emotional Analysis
+        emotional_analysis = {
+            'positivity_ratio': len([s for s in sentiments if s > 0]) / tweet_count if tweet_count > 0 else 0,
+            'emotional_volatility': np.std(sentiments) if sentiments else 0,
+            'emotional_depth': themes.get('emotional_depth', 0)
+        }
+
+        # Final Output
         return {
             'sentiment': {
                 'average': avg_sentiment,
                 'positivity_ratio': emotional_analysis['positivity_ratio'],
                 'emotional_volatility': emotional_analysis['emotional_volatility']
             },
-            'dominant_themes': [{'theme': theme, 'frequency': count/tweet_count} 
-                            for theme, count in dominant_themes],
+            'dominant_themes': [{'theme': theme, 'frequency': count / total_theme_score} 
+                               for theme, count in dominant_themes],
             'theme_distribution': theme_distribution,
             'personality_indicators': personality_indicators,
             'analysis_metadata': {
@@ -444,18 +562,17 @@ class TwitterTarotReader:
     def fetch_user_details(self, username):
             """Fetch user details from the Twitter API."""
             url = "https://twitter154.p.rapidapi.com/user/details"
-            querystring = {"username": username}  # Pass the username as a query parameter
+            querystring = {"username": username} 
             headers = {
                 "x-rapidapi-host": os.environ.get("RAPIDAPI_HOST1"),
-                "x-rapidapi-key": os.environ.get("RAPIDAPI_KEY1") # Replace with your RapidAPI key
+                "x-rapidapi-key": os.environ.get("RAPIDAPI_KEY1")
             }
 
             try:
                 response = requests.get(url, headers=headers, params=querystring)
-                response.raise_for_status()  # Raise an exception for HTTP errors
+                response.raise_for_status() 
                 user_data = response.json()
 
-                # Extract required fields
                 user_details = {
                     "follower_count": user_data.get("follower_count", 0),
                     "number_of_tweets": user_data.get("number_of_tweets", 0)
@@ -464,7 +581,7 @@ class TwitterTarotReader:
 
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user details: {e}")
-                return {"follower_count": 0, "number_of_tweets": 0}  # Return default values on error
+                return {"follower_count": 0, "number_of_tweets": 0} 
 
 
 
@@ -614,34 +731,60 @@ class TwitterTarotReader:
         }
         return reading
 
-def main():
+
+@app.route("/user/tarot-reading", methods=["GET"])
+def get_tarot_reading():
+    username = request.args.get('username')
+    if not username:
+        return jsonify({"error": "Username is required."}), 400
+    
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": RAPIDAPI_HOST
+    }
+    
+    url_initial = f"https://twitter154.p.rapidapi.com/user/tweets"
+    params_initial = {
+        "username": username,
+        "limit": "20",
+        "include_replies": "false",
+        "include_pinned": "true"
+    }
+    
     try:
-        reader = TwitterTarotReader()
+        response_initial = requests.get(url_initial, headers=headers, params=params_initial)
+        response_initial.raise_for_status()
+        data = response_initial.json()
         
-        screenname = input("Enter Twitter screen name: ")
-        print(f"\nFetching tweets for @{screenname}...")
-        tweets = reader.get_tweets(screenname)
+        tweets = data.get("results", [])
+        continuation_token = data.get("continuation_token")
+        
+        if len(tweets) < 50 and continuation_token:
+            url_continuation = f"https://twitter154.p.rapidapi.com/user/tweets/continuation"
+            params_continuation = {
+                "username": username,
+                "limit": "40",  
+                "continuation_token": continuation_token,
+                "include_replies": "false"
+            }
+            response_continuation = requests.get(url_continuation, headers=headers, params=params_continuation)
+            response_continuation.raise_for_status()
+            continuation_data = response_continuation.json()
+            
+            # Combine results
+            tweets += continuation_data.get("results", [])
+            tweets = tweets[:50]  # Ensure no more than 50 tweets
+        
+        # return jsonify({"tweets": tweets, "count": len(tweets)})
+        reader = TwitterTarotReader()
         analysis = reader.analyze_personality(tweets)
         user_scores = [0.12, 0.18, 0.05, 0.22, 0.15, 0.10, 0.08, 0.20, 0.25, 0.30]
-        reading = reader.generate_reading(analysis, tweets, user_scores, screenname)
-        
-        print("\n🌟 Your Technical Twitter Tarot Reading 🌟")
-        print("=" * 50)
-        print(f"Selected Card: {reading['card_name']}")
-        print(f"Meaning: {reading['card_meaning']}")
-        print(f"\nCareer Insight: {reading['career_advice']}")
-        
-        print("\nBased on your Twitter activity:")
-        print(f"- Primary Theme: {reading['analysis_summary']['dominant_theme']}")
-        print(f"- Overall Sentiment: {reading['analysis_summary']['sentiment']}")
-
-        print("\nEngagement Metrics:")
-        for metric, score in reading['analysis_summary']['engagement_metrics'].items():
-            if isinstance(score, float):
-                print(f"- {metric.replace('_', ' ').title()}: {score:.2%}")
-        
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        reading = reader.generate_reading(analysis, tweets, user_scores, username)
+        return jsonify(reading)
+    
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
+
